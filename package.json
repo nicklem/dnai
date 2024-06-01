@@ -7,7 +7,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "make:schema": "typescript-json-schema types.d.ts GraphDefinition > schema.json"
   },
   "keywords": [],
   "author": "",

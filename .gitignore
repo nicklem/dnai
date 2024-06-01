@@ -1,3 +1,5 @@
 node_modules/
 .idea/
 .env
+graph.json
+schema.json
