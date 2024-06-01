@@ -1,28 +1,36 @@
 import {GraphDefinition} from "./types";
 
 export const graphDefinition: GraphDefinition = {
-  models: [
+  query: "Set a timer for the time it takes a golark to boil. Research if unsure.",
+  entryPoint: "model",
+  nodes: [
     {
+      type: "model",
       id: "model",
       model: "gpt-3.5-turbo-0613",
       temperature: 0,
-    }
-  ],
-  tools: [
+    },
     {
+      type: "tool",
       id: "search-for-info",
     },
     {
+      type: "tool",
       id: "set-a-timer",
     },
     {
+      type: "tool",
       id: "something-else",
     },
   ],
   edges: [
     {
-      from: "__start__",
-      to: "model"
+      from: "model",
+      to: [
+        "search-for-info",
+        "set-a-timer",
+      ],
+      router: "router",
     },
     {
       from: "search-for-info",
@@ -33,14 +41,4 @@ export const graphDefinition: GraphDefinition = {
       to: "model"
     },
   ],
-  conditionalEdges: [
-    {
-      from: "model",
-      to: [
-        "search-for-info",
-        "set-a-timer",
-      ],
-      router: "router",
-    }
-  ]
 }

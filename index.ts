@@ -1,11 +1,11 @@
 import {config} from 'dotenv';
 import {ChatOpenAI} from "@langchain/openai";
 import {AIMessage, BaseMessage, HumanMessage} from "@langchain/core/messages";
-import {END, MessageGraph} from "@langchain/langgraph";
+import {END, MessageGraph, START} from "@langchain/langgraph";
 import {ToolNode as LCToolNode} from "@langchain/langgraph/prebuilt";
 import {StructuredTool} from "@langchain/core/tools";
 import {graphDefinition} from "./graph";
-import {ModelNode, ToolNode} from "./types";
+import {ConditionalEdge, Edge, ModelNode, ToolNode} from "./types";
 import {makeDummySearch, makeDummyTimer} from "./dummy-tools";
 
 config();
@@ -24,7 +24,6 @@ const router = (state: BaseMessage[]) => {
 
 const routers: Record<string, any> = {
     router,
-    __default: router
 }
 
 function initTools(toolNodes: ToolNode[]) {
@@ -58,7 +57,7 @@ function initModels(
         const boundTools = toolsPerModel[id].map(toolId => tools[toolId]);
         switch(model) {
             case "gpt-3.5-turbo-0613":
-                let output: any = new ChatOpenAI({
+                let output: any = new ChatOpenAI({ // TODO fix any
                     model,
                     temperature,
                 });
@@ -74,17 +73,22 @@ function initModels(
 }
 
 async function main() {
-    const toolsPerModel = graphDefinition.conditionalEdges.reduce((acc, edge) => {
+    const defModels = graphDefinition.nodes.filter(({type}) => type === "model") as ModelNode[];
+    const defTools = graphDefinition.nodes.filter(({type}) => type === "tool") as ToolNode[];
+    const defEdges = graphDefinition.edges.filter(({to}) => typeof to === "string") as Edge[];
+    const defConditionalEdges = graphDefinition.edges.filter(({to}) => Array.isArray(to)) as ConditionalEdge[];
+
+    const toolsPerModel = defConditionalEdges.reduce((acc, edge) => {
         acc[edge.from] = edge.to;
         return acc;
     }, {} as Record<string, string[]>);
 
-    const tools = initTools(graphDefinition.tools);
-    const models = initModels(graphDefinition.models, tools, toolsPerModel);
+    const tools = initTools(defTools);
+    const models = initModels(defModels, tools, toolsPerModel);
 
     const graph = new MessageGraph();
 
-    graphDefinition.models.forEach((node: ModelNode) => {
+    defModels.forEach((node: ModelNode) => {
         const model = models[node.id];
         if(!model) return;
         const modelNode = async (state: BaseMessage[]) => {
@@ -95,7 +99,7 @@ async function main() {
         graph.addNode(node.id, modelNode);
     });
 
-    graphDefinition.tools.forEach((node: ToolNode) => {
+    defTools.forEach((node: ToolNode) => {
         const tool = tools[node.id];
         if(!tool) return;
         const toolNode = new LCToolNode<BaseMessage[]>([tool], node.id);
@@ -103,22 +107,22 @@ async function main() {
         graph.addNode(node.id, toolNode);
     });
 
-    graphDefinition.edges.forEach((edge: any) => {
-        graph.addEdge(edge.from, edge.to);
+    graph.addEdge(START, graphDefinition.entryPoint as any);
+
+    defEdges.forEach((edge: Edge) => {
+        graph.addEdge(edge.from as any, edge.to as any);
     });
 
-    graphDefinition.conditionalEdges.forEach(edge => {
+    defConditionalEdges.forEach(edge => {
         const from = edge.from as any;
-        const router = routers[edge.router ?? "__default"];
+        const router = routers[edge.router];
 
         graph.addConditionalEdges(from, router);
     });
 
     const runnable = graph.compile();
 
-    const response = await runnable.invoke([new HumanMessage(
-        "Set a timer for the time it takes a golark to boil. Feel free to search for more information."
-    )]);
+    const response = await runnable.invoke([new HumanMessage(graphDefinition.query)]);
 
     console.log(`AI response: \`${(response[response.length - 1] as AIMessage).content}\``);
 }
