@@ -2,7 +2,9 @@ import {GraphDefinition} from "./types";
 import * as fs from "node:fs";
 
 export const graphDefinition: GraphDefinition = {
-  query: "Set a timer for the time it takes a golark to boil. Research if unsure.",
+  initState: {
+    init__query: "Set a timer for the time it takes a golark to boil. Research if unsure.",
+  },
   entryPoint: "model",
   nodes: [
     {

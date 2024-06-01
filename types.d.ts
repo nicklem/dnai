@@ -1,3 +1,5 @@
+import {BaseMessage} from "@langchain/core/messages";
+
 export type NodeId = GraphDefinition["nodes"][number]["id"]
 
 export type Node<T extends {} = {}> = {
@@ -25,8 +27,20 @@ export type ConditionalEdge = {
     router: string;
 }
 
+export type InternalState = {
+    __messages: BaseMessage[];
+}
+
+export type ReservedKeys = `__${string}`;
+
+export type InitialState = Record<string, any> & {
+    init__query: string;
+} & {
+    [k in ReservedKeys]?: never;
+}
+
 export type GraphDefinition = {
-    query: string;
+    initState: InitialState;
     entryPoint: NodeId;
     nodes: Array<ModelNode | ToolNode>;
     edges: Array<Edge | ConditionalEdge>;

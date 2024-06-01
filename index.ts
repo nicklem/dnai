@@ -1,19 +1,21 @@
 import {config} from 'dotenv';
 import {ChatOpenAI} from "@langchain/openai";
 import {AIMessage, BaseMessage, HumanMessage} from "@langchain/core/messages";
-import {END, MessageGraph, START} from "@langchain/langgraph";
+import {END, START, StateGraph} from "@langchain/langgraph";
 import {ToolNode as LCToolNode} from "@langchain/langgraph/prebuilt";
 import {StructuredTool} from "@langchain/core/tools";
 import {graphDefinition} from "./graph";
-import {ConditionalEdge, Edge, ModelNode, NodeId, ToolNode} from "./types";
+import {ConditionalEdge, Edge, InternalState, ModelNode, NodeId, ToolNode} from "./types";
 import {makeDummySearch, makeDummyTimer} from "./dummy-tools";
+import {BaseChatModel} from "@langchain/core/dist/language_models/chat_models";
 
 config();
 
 // TODO fix any
 
-const router = (state: BaseMessage[]) => {
-    const toolCalls = (state[state.length - 1] as AIMessage).tool_calls ?? [];
+const router = (state: InternalState): string => {
+    const messages = state.__messages;
+    const toolCalls = (messages[messages.length - 1] as AIMessage).tool_calls ?? [];
     if(toolCalls.length) {
         const toolId = toolCalls[toolCalls.length - 1]?.name;
         console.log("Calling tool: ", toolId);
@@ -50,7 +52,7 @@ function initModels(
     tools: Record<string, StructuredTool>,
     toolsPerModel: Record<string, string[]>
 ) {
-    const models: Record<string, any> = {};
+    const models: Record<string, BaseChatModel> = {};
 
     defModels.forEach(node => {
         const {model, id, temperature} = node;
@@ -92,15 +94,22 @@ async function main() {
     const tools = initTools(defTools);
     const models = initModels(defModels, tools, toolsPerModel);
 
-    const graph = new MessageGraph();
+    const graph = new StateGraph<InternalState>({
+        channels: {
+            __messages: {
+                value: (x: BaseMessage[], y: BaseMessage[]) => x.concat(y),
+                default: () => [],
+            },
+        },
+    });
 
     defModels.forEach((node: ModelNode) => {
         const model = models[node.id];
         if(!model) return;
-        const modelNode = async (state: BaseMessage[]) => {
-            const response = await model.invoke(state);
-            return [response];
-        }
+
+        const modelNode = async (state: InternalState) => {
+            return {__messages: [await model.invoke(state.__messages)]};
+        };
 
         graph.addNode(node.id, modelNode);
     });
@@ -108,7 +117,11 @@ async function main() {
     defTools.forEach((node: ToolNode) => {
         const tool = tools[node.id];
         if(!tool) return;
-        const toolNode = new LCToolNode<BaseMessage[]>([tool], node.id);
+        const baseToolNode = new LCToolNode<BaseMessage[]>([tool], node.id);
+
+        const toolNode = async (state: InternalState): Promise<Partial<InternalState>> => {
+            return { __messages: await baseToolNode.invoke(state.__messages) };
+        };
 
         graph.addNode(node.id, toolNode);
     });
@@ -128,9 +141,19 @@ async function main() {
 
     const runnable = graph.compile();
 
-    const response = await runnable.invoke([new HumanMessage(graphDefinition.query)]);
+    const initialState: InternalState = Object.assign(
+        {},
+        graphDefinition.initState,
+        {
+            __messages: [new HumanMessage(graphDefinition.initState.init__query)]
+        },
+    )
 
-    console.log(`AI response: \`${(response[response.length - 1] as AIMessage).content}\``);
+    const response = await runnable.invoke(initialState);
+
+    const reply = response.__messages[response.__messages.length - 1].content;
+
+    console.log(`AI response: \`${reply}\``);
 }
 
 main();
