@@ -6,7 +6,7 @@ import {ToolNode as LCToolNode} from "@langchain/langgraph/prebuilt";
 import {StructuredTool} from "@langchain/core/tools";
 import {graphDefinition} from "./graph";
 import {ConditionalEdge, Edge, InternalState, ModelNode, NodeId, ToolNode} from "./types";
-import {makeDummySearch, makeDummyTimer} from "./dummy-tools";
+import toolFactories from "./tools";
 import {BaseChatModel} from "@langchain/core/dist/language_models/chat_models";
 
 config();
@@ -28,23 +28,13 @@ const routers: Record<string, any> = {
     router,
 }
 
-function initTools(toolNodes: ToolNode[]) {
-    const tools: Record<string, StructuredTool> = {};
-
-    toolNodes.forEach(node => {
-        const {id} = node;
-
-        switch(id) {
-            case "search-for-info":
-                tools[id] = makeDummySearch(id);
-                break;
-            case "set-a-timer":
-                tools[id] = makeDummyTimer(id);
-                break;
-        }
-    });
-
-    return tools;
+function initTools(toolNodes: ToolNode[]): Record<string, StructuredTool> {
+    return toolNodes.reduce((acc, node) => {
+        const toolFactory = toolFactories[node.id];
+        if(!toolFactory) throw new Error(`Tool factory not found: ${(node.id)}`);
+        acc[node.id] = toolFactory();
+        return acc;
+    }, {} as Record<string, StructuredTool>);
 }
 
 function initModels(
@@ -116,13 +106,11 @@ async function main() {
 
     defTools.forEach((node: ToolNode) => {
         const tool = tools[node.id];
-        if(!tool) return;
+        if(!tool) throw new Error(`Tool not found: ${node.id}`);
         const baseToolNode = new LCToolNode<BaseMessage[]>([tool], node.id);
-
         const toolNode = async (state: InternalState): Promise<Partial<InternalState>> => {
             return { __messages: await baseToolNode.invoke(state.__messages) };
         };
-
         graph.addNode(node.id, toolNode);
     });
 

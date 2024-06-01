@@ -1,9 +1,9 @@
 import {DynamicStructuredTool} from "@langchain/core/tools";
 import * as z from "zod";
 
-export function makeDummySearch(id: string) {
+function dummySearchForInfo() {
     return new DynamicStructuredTool({
-        name: "search-for-info",
+        name: "dummySearchForInfo",
         description: "Searches for information on the web.",
         schema: z.object({
             query: z.string().describe("The query to search for."),
@@ -12,9 +12,9 @@ export function makeDummySearch(id: string) {
     })
 }
 
-export function makeDummyTimer(id: string) {
+function dummySetATimer() {
     return new DynamicStructuredTool({
-        name: "set-a-timer",
+        name: "dummySetATimer",
         description: "Sets a timer.",
         schema: z.object({
             time: z.number().describe("The time in minutes to set the timer for."),
@@ -22,3 +22,10 @@ export function makeDummyTimer(id: string) {
         func: async ({time}) => "Timer set.",
     })
 }
+
+const toolFactories: Record<string, () => DynamicStructuredTool> = {
+    dummySearchForInfo,
+    dummySetATimer,
+}
+
+export default toolFactories;

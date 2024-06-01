@@ -15,32 +15,28 @@ export const graphDefinition: GraphDefinition = {
     },
     {
       type: "tool",
-      id: "search-for-info",
+      id: "dummySearchForInfo",
     },
     {
       type: "tool",
-      id: "set-a-timer",
-    },
-    {
-      type: "tool",
-      id: "something-else",
+      id: "dummySetATimer",
     },
   ],
   edges: [
     {
       from: "model",
       to: [
-        "search-for-info",
-        "set-a-timer",
+        "dummySearchForInfo",
+        "dummySetATimer",
       ],
       router: "router",
     },
     {
-      from: "search-for-info",
+      from: "dummySearchForInfo",
       to: "model"
     },
     {
-      from: "set-a-timer",
+      from: "dummySetATimer",
       to: "model"
     },
   ],
