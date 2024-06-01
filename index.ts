@@ -5,7 +5,7 @@ import {END, MessageGraph, START} from "@langchain/langgraph";
 import {ToolNode as LCToolNode} from "@langchain/langgraph/prebuilt";
 import {StructuredTool} from "@langchain/core/tools";
 import {graphDefinition} from "./graph";
-import {ConditionalEdge, Edge, ModelNode, ToolNode} from "./types";
+import {ConditionalEdge, Edge, ModelNode, NodeId, ToolNode} from "./types";
 import {makeDummySearch, makeDummyTimer} from "./dummy-tools";
 
 config();
@@ -46,23 +46,23 @@ function initTools(toolNodes: ToolNode[]) {
 }
 
 function initModels(
-    modelNodes: ModelNode[],
+    defModels: ModelNode[],
     tools: Record<string, StructuredTool>,
     toolsPerModel: Record<string, string[]>
 ) {
     const models: Record<string, any> = {};
 
-    modelNodes.forEach(node => {
+    defModels.forEach(node => {
         const {model, id, temperature} = node;
         const boundTools = toolsPerModel[id].map(toolId => tools[toolId]);
         switch(model) {
             case "gpt-3.5-turbo-0613":
-                let output: any = new ChatOpenAI({ // TODO fix any
+                let output = new ChatOpenAI({
                     model,
                     temperature,
                 });
                 if(boundTools.length) {
-                    output = output.bindTools(boundTools);
+                    output = output.bindTools(boundTools) as ChatOpenAI;
                 }
                 models[id] = output;
                 break;
@@ -78,10 +78,16 @@ async function main() {
     const defEdges = graphDefinition.edges.filter(({to}) => typeof to === "string") as Edge[];
     const defConditionalEdges = graphDefinition.edges.filter(({to}) => Array.isArray(to)) as ConditionalEdge[];
 
-    const toolsPerModel = defConditionalEdges.reduce((acc, edge) => {
-        acc[edge.from] = edge.to;
-        return acc;
-    }, {} as Record<string, string[]>);
+    const toolsPerModel = defConditionalEdges.reduce(
+        (acc, edge) => {
+            const prevTools = acc[edge.from] ?? [];
+            const newTools = edge.to;
+            const uniqueTools = new Set([...prevTools, ...newTools]);
+            acc[edge.from] = Array.from(uniqueTools);
+            return acc;
+        },
+        {} as Record<NodeId, NodeId[]>
+    );
 
     const tools = initTools(defTools);
     const models = initModels(defModels, tools, toolsPerModel);
